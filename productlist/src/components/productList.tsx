@@ -1,5 +1,6 @@
 import React from 'react';
-import { fetchProducts } from '../services/productAPI';   
+import { fetchProducts, searchProductByName } from '../services/productAPI';   
+import SearchBar from './searchBar';
 import { useEffect, useState } from 'react';  
 import './productList.css';
 interface Product {
@@ -54,6 +55,20 @@ export const ProductListContainer: React.FC = () => {
     }
     , [currentPage, itemsPerPage]);
 
+    const handleSearch = async (query: string) => {
+        try {
+            setLoading(true);
+            const data = await searchProductByName(query);
+            setProducts(data.products);
+            setTotalProducts(data.total || data.products.length);
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleNextPage = () => {
         if (currentPage < Math.ceil(totalProducts / itemsPerPage)) {
             setCurrentPage((prevPage) => prevPage + 1);
@@ -69,7 +84,9 @@ export const ProductListContainer: React.FC = () => {
     if (loading) return <div>Loading...</div>;
     if (error) return <div>{error}</div>;
 
-    return ( <div>
+    return ( 
+    <div>
+        <SearchBar onSearch={handleSearch} />
         <ProductList products={products} />
         <div className="pagination">
             <button onClick={handlePreviousPage} disabled={currentPage === 1}>
