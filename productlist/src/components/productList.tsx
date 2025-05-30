@@ -56,6 +56,10 @@ export const ProductListContainer: React.FC = () => {
     , [currentPage, itemsPerPage]);
 
     const handleSearch = async (query: string) => {
+         if (!query) {
+            setCurrentPage(1); // Reset to the first page if the search query is empty
+            return;
+        }
         try {
             setLoading(true);
             const data = await searchProductByName(query);
