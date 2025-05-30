@@ -1,8 +1,8 @@
-import React from 'react';
-import { fetchProducts, searchProductByName } from '../services/productAPI';   
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { fetchProducts, searchProductByName } from '../services/productAPI';
 import SearchBar from './searchBar';
-import { useEffect, useState } from 'react';  
 import './productList.css';
+
 interface Product {
     id: number;
     title: string;
@@ -14,6 +14,7 @@ interface Product {
 interface ProductListProps {
     products: Product[];
 }
+
 const ProductList: React.FC<ProductListProps> = ({ products }) => {
     return (
         <div className="product-list">
@@ -27,22 +28,38 @@ const ProductList: React.FC<ProductListProps> = ({ products }) => {
             ))}
         </div>
     );
-}
+};
+
 export const ProductListContainer: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState<number>(1);
-    const [totalProducts, setTotalProducts] = useState<number>(0);
-    let itemsPerPage = 10;
+    const [hasMore, setHasMore] = useState<boolean>(true);
+    const itemsPerPage = 10;
 
-    useEffect(() => {     
+    const observer = useRef<IntersectionObserver | null>(null);
+    const lastProductRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            if (loading) return;
+            if (observer.current) observer.current.disconnect();
+            observer.current = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && hasMore) {
+                    setCurrentPage((prevPage) => prevPage + 1);
+                }
+            });
+            if (node) observer.current.observe(node);
+        },
+        [loading, hasMore]
+    );
+
+    useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
                 const data = await fetchProducts(itemsPerPage, (currentPage - 1) * itemsPerPage);
-                setProducts(data.products);
-                setTotalProducts(data.total); 
+                setProducts((prevProducts) => [...prevProducts, ...data.products]);
+                setHasMore(data.products.length > 0); // Check if there are more products to load
                 setError(null);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'An error occurred');
@@ -52,19 +69,19 @@ export const ProductListContainer: React.FC = () => {
         };
 
         fetchData();
-    }
-    , [currentPage, itemsPerPage]);
+    }, [currentPage]);
 
     const handleSearch = async (query: string) => {
-         if (!query) {
+        if (!query) {
             setCurrentPage(1); // Reset to the first page if the search query is empty
+            // setProducts([]);
             return;
         }
         try {
             setLoading(true);
             const data = await searchProductByName(query);
             setProducts(data.products);
-            setTotalProducts(data.total || data.products.length);
+            setHasMore(false); // Disable infinite scroll for search results
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -73,36 +90,16 @@ export const ProductListContainer: React.FC = () => {
         }
     };
 
-    const handleNextPage = () => {
-        if (currentPage < Math.ceil(totalProducts / itemsPerPage)) {
-            setCurrentPage((prevPage) => prevPage + 1);
-        }
-    };
-
-    const handlePreviousPage = () => {
-        if (currentPage > 1) {
-            setCurrentPage((prevPage) => prevPage - 1);
-        }
-    };
-
-    if (loading) return <div>Loading...</div>;
     if (error) return <div>{error}</div>;
 
-    return ( 
-    <div>
-        <SearchBar onSearch={handleSearch} />
-        <ProductList products={products} />
-        <div className="pagination">
-            <button onClick={handlePreviousPage} disabled={currentPage === 1}>
-                Previous
-            </button>
-            <span>
-                Page {currentPage} of {Math.ceil(totalProducts / itemsPerPage)}
-            </span>
-            <button onClick={handleNextPage} disabled={currentPage === Math.ceil(totalProducts / itemsPerPage)}>
-                Next
-            </button>
+    return (
+        <div>
+            <SearchBar onSearch={handleSearch} />
+            <ProductList products={products} />
+            <div ref={lastProductRef} style={{ height: '1px' }}></div>
+            {loading && <div>Loading...</div>}
         </div>
-    </div>);
-}
-export default ProductListContainer;    
+    );
+};
+
+export default ProductListContainer;
